@@ -30,7 +30,10 @@ ph.matplotlibStyle(small=10, medium=12, large=14)
 
 
 def resample(
-    original_coords: npt.NDArray[np.float64], n_vertices: int = 1000
+    original_coords: npt.NDArray[np.float64], 
+    n_vertices: int = 1000, 
+    s_val: int = 0,
+    k_val: int = 3,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Resample discrete plane curve into n_vertices
 
@@ -51,7 +54,7 @@ def resample(
 
     # Cubic B-spline interpolation with no smoothing (s=0)
     # tck, _ = splprep([original_coords[:, 0], original_coords[:, 1]], s=0, per=True) #periodic
-    tck, _ = splprep([original_coords[:, 0], original_coords[:, 1]], s=0, per=False) #non-periodic
+    tck, _ = splprep([original_coords[:, 0], original_coords[:, 1]], s=s_val, k=k_val, per=False) #non-periodic
 
     xi, yi = splev(np.linspace(0, 1, n_vertices), tck)
     coords = np.hstack((xi.reshape(-1, 1), yi.reshape(-1, 1)))
@@ -248,7 +251,8 @@ def preprocess_mesh(
     file: Union[str, Path], 
     resample_geometry: bool = True, 
     n_vertices: int = 1000,
-    unit_scale: float = 0.6
+    unit_scale: float = 0.6, 
+    s_val: int = 0,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Preprocess the plane curve geometry
 
@@ -273,7 +277,7 @@ def preprocess_mesh(
     original_coords[:, 1] = original_coords[:, 1] * -1
 
     if resample_geometry:
-        coords, _ = resample(original_coords, n_vertices)
+        coords, _ = resample(original_coords, n_vertices, s_val)
     else:
         coords = original_coords
     return coords, original_coords

@@ -62,6 +62,31 @@ def make_parabola(
 	coords = np.column_stack((x_coords, y_coords))
 	return coords
 
+def add_noise(ori_coords: np.ndarray, noise_level: float, seed: int=0) -> np.ndarray:
+
+	coords = ori_coords.copy()
+
+	x_coords = coords[:, 0]
+	y_coords = coords[:, 1]
+
+	np.random.seed(seed)
+	noise_x = np.random.normal(0, noise_level, size=x_coords.shape)  # Gaussian noise
+	noise_y = np.random.normal(0, noise_level, size=y_coords.shape)  # Gaussian noise
+
+	x_coords += noise_x
+	y_coords += noise_y
+
+	coords = np.column_stack((x_coords, y_coords))
+	return coords
+
+def calc_arc(
+    points: np.ndarray) -> np.ndarray:
+
+    arc_lengths = np.cumsum(np.r_[0, np.sqrt(np.sum(np.diff(points, axis=0)**2, axis=1))])
+    model_u = arc_lengths / arc_lengths[-1]  # Normalize to [0, 1]
+
+    return model_u
+
 
 def plot_system(coords: np.ndarray, force: np.ndarray):
 
@@ -132,9 +157,12 @@ def plot_parabola(coords: np.ndarray, force: np.ndarray = None, scale = 10):
 def plot_parabola_ax(
 		coords: np.ndarray, 
 		force: np.ndarray, 
-		ax, mesh_size, 
+		ax,  
 		force_type, scale,
-		ori_coords: np.ndarray = None):
+		ori_coords: np.ndarray = None, 
+		s_val: float = None, 
+		n_iter: int = None, 
+		mesh_size: int = None):
     scale_factor = 1e5
     x_coords = coords[:, 0]
     y_coords = coords[:, 1]
@@ -158,7 +186,16 @@ def plot_parabola_ax(
     ax.set_ylim(-30, 70)
     
     # Set title with force type and mesh size
-    ax.set_title(f"{force_type} (mesh size: {mesh_size})")
+    if mesh_size is not None:
+        ax.set_title(f"{force_type} (mesh size: {mesh_size})")
+    
+    if s_val is not None:
+        ax.set_title(f"{force_type} (smoothing: s = {s_val})")
+
+    if n_iter is not None:
+        ax.set_title(f"{force_type} (step: t = {int(n_iter)})")
+        # ax.set_title(f"{force_type} (number: n = {int(n_iter)})")
+
 
 
 
@@ -208,3 +245,30 @@ def plot_norm_side_by_side(N_node_values, force_sums_bend, force_sums_surf, axes
 	# Add a bold horizontal line at y=0
 	axes[0].axhline(0, color='black', linewidth=1)  # Add bold y=0 line on first plot
 	axes[1].axhline(0, color='black', linewidth=1)  # Add bold y=0 line on second plot
+
+
+
+
+
+def count_zero_crossings(data):
+	"""
+	Count the number of zero-crossings in the data.
+
+	Parameters:
+	    data (list or numpy array): The discrete data points f(x).
+	    
+	Returns:
+	    int: The number of zero-crossings.
+	"""
+	# Ensure the data is a numpy array
+	data = np.array(data)
+
+	# Calculate sign changes
+	signs = np.sign(data)
+	signs = signs[signs != 0]
+	zero_crossings = np.where(np.diff(signs) != 0)[0]
+
+	return len(zero_crossings)
+
+
+
