@@ -301,7 +301,8 @@ def make_nondimensional_movie(
     )
 
     def animate(Ksg_):
-        physics_marker.set_xdata(np.array(Ksg_, Ksg_))
+        physics_marker.set_xdata(np.array([Ksg_, Ksg_]))
+        # physics_marker.set_xdata(np.array(Ksg_, Ksg_))
 
         forces = np.sum(relaxed_force[Ksg_], axis=0)
         if style == "quiver":
