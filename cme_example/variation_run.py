@@ -43,11 +43,11 @@ def get_average_edge_length(coords):
 #     )
 #     return forces
 
-def get_force_density(parameters, coords, spont_c = None):
+def get_force_density(parameters, coords, data_points = None, spont_c = None):
 
     # mem = ClosedPlaneCurveMaterial(**parameters)
     # mem = OpenPlaneCurveMaterial(**parameters)
-    mem = OpenPlaneCurveMaterial(**parameters, spont_curvatures = spont_c)
+    mem = OpenPlaneCurveMaterial(**parameters, data_points = data_points, spont_curvatures = spont_c)
     forces = np.array(
         [
             # force / ClosedPlaneCurveGeometry.vertex_dual_length(coords)

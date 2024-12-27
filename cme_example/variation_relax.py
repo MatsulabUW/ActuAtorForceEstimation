@@ -283,12 +283,13 @@ def preprocess_mesh(
     return coords, original_coords
 
 
-def relax_bending(coords, Kb, Ksg, Ksl, dt, n_iter, boundary):
+def relax_bending(coords, data_points, Kb, Ks, Kr, Kd, dt, n_iter, boundary):
     # Instantiate material properties
     parameters = {
         "Kb": Kb / 4,
-        "Ksg": Ksg,
-        "Ksl": Ksl,
+        "Ks": Ks,
+        "Kr": Kr,
+        "Kd": Kd,
         "boundary": boundary
     }
     # Perform energy relaxation
@@ -296,11 +297,35 @@ def relax_bending(coords, Kb, Ksg, Ksl, dt, n_iter, boundary):
         coords, _ = fwd_euler_integrator(
             coords,
             # ClosedPlaneCurveMaterial(**parameters),
-            OpenPlaneCurveMaterial(**parameters),
+            OpenPlaneCurveMaterial(**parameters, data_points = data_points),
             n_steps=n_iter,
             dt=dt,
         )
     return coords
+
+
+def relax_bending_log(coords, data_points, kappa, sigma, Kr, Kd, dt, n_iter, boundary, del_save, spont_c=None):
+    # Instantiate material properties
+    parameters = {
+        "kappa": kappa,
+        "sigma": sigma,
+        "Kr": Kr,
+        "Kd": Kd,
+        "boundary": boundary
+    }
+    # Perform energy relaxation
+    if n_iter > 0:
+        coords_log, energy_log, forces_log = fwd_euler_integrator(
+            coords,
+            OpenPlaneCurveMaterial(**parameters, data_points = data_points, spont_curvatures = spont_c),
+            n_steps=n_iter,
+            dt=dt,
+            del_save=del_save,
+        )
+
+    return coords_log, energy_log, forces_log
+
+
 
 
 relaxation_parameters = {
@@ -309,8 +334,8 @@ relaxation_parameters = {
             "dt": 5e-6,
             "n_iter": int(1e5),
             "Kb": 1,
-            "Ksg": 1,
-            "Ksl": 0.1,
+            "Ks": 1,
+            "Kr": 0.1,
         }
     ],
     "34D-grid2-s3_028_16": [
@@ -318,8 +343,8 @@ relaxation_parameters = {
             "dt": 1e-6,
             "n_iter": int(1e5),
             "Kb": 1,
-            "Ksg": 1,
-            "Ksl": 1,
+            "Ks": 1,
+            "Kr": 1,
         }
     ],
     "34D-grid2-s5_005_16": [
@@ -327,15 +352,15 @@ relaxation_parameters = {
             "dt": 3e-7,
             "n_iter": int(1e5),
             "Kb": 1,
-            "Ksg": 20,
-            "Ksl": 1,
+            "Ks": 20,
+            "Kr": 1,
         },
         {
             "dt": 3e-7,
             "n_iter": int(5e4),
             "Kb": 1,
-            "Ksg": 1,
-            "Ksl": 0.1,
+            "Ks": 1,
+            "Kr": 0.1,
         },
     ],
     "34D-grid2-s3-acta1_001_16": [
@@ -343,8 +368,8 @@ relaxation_parameters = {
             "dt": 1e-5,
             "n_iter": int(8e2),
             "Kb": 1,
-            "Ksg": 1,
-            "Ksl": 0.1,
+            "Ks": 1,
+            "Kr": 0.1,
         }
     ],
     "other": [
@@ -352,8 +377,8 @@ relaxation_parameters = {
             "dt": 1e-5,
             "n_iter": int(1e5),
             "Kb": 1,
-            "Ksg": 1,
-            "Ksl": 0.1,
+            "Ks": 1,
+            "Kr": 0.1,
         }
     ],
 }
@@ -402,12 +427,12 @@ def generate_relaxation_movie(file: Path, n_vertices: int = 1000):
         file, resample_geometry=True, n_vertices=n_vertices
     )
 
-    def get_trajectory(coords, Kb, Ksg, Ksl, dt, n_iter):
+    def get_trajectory(coords, Kb, Ks, Kr, dt, n_iter):
         # Instantiate material properties
         parameters = {
             "Kb": Kb / 4,
-            "Ksg": Ksg,
-            "Ksl": Ksl,
+            "Ks": Ks,
+            "Kr": Kr,
         }
         # Perform energy relaxation
         c, e, f = fwd_euler_integrator(

@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.integrate import cumulative_trapezoid
+from scipy.interpolate import interp1d
 
 
 def make_straight_line(
@@ -22,45 +24,93 @@ def make_straight_line(
 
 
 def make_parabola(
-    N_node : int,	# number of nodes
-    L_etoe : float, # end-to-end distance
-    height: float, 
+    N_node: int,    # number of nodes
+    L_etoe: float,  # end-to-end distance
+    height: float,
     point_dist: str = "unif",
-    noise_level: float = 0.0, 
-    noise_type: str = "normal" # "normal" for Gaussian, "uniform" for uniform
+    noise_level: float = 0.0,
+    noise_type: str = "normal"  # "normal" for Gaussian, "uniform" for uniform
 ) -> np.ndarray:
+    
+    # Initial x-coordinates uniformly sampled
+    x_coords = np.linspace(0, L_etoe, 1000)  # Use a high resolution for accurate arc length computation
+    x_centered = x_coords - L_etoe / 2.0
+    y_coords = height * (1 - (x_centered / (L_etoe / 2))**2)
+    
+    # Compute arc length
+    dx = np.gradient(x_coords)
+    dy = np.gradient(y_coords)
+    ds = np.sqrt(dx**2 + dy**2)
+    arc_length = cumulative_trapezoid(ds, x_coords, initial=0)
+    
+    # Resample based on evenly spaced arc length
+    uniform_arc_length = np.linspace(0, arc_length[-1], N_node)
+    interp_x = interp1d(arc_length, x_coords, kind='linear')
+    interp_y = interp1d(arc_length, y_coords, kind='linear')
+    
+    new_x_coords = interp_x(uniform_arc_length)
+    new_y_coords = interp_y(uniform_arc_length)
+    
+    # Add noise to the coordinates
+    if noise_level > 0:
+        np.random.seed(1234)
+        if noise_type == "normal":
+            noise_x = np.random.normal(0, noise_level, size=new_x_coords.shape)  # Gaussian noise
+            noise_y = np.random.normal(0, noise_level, size=new_y_coords.shape)  # Gaussian noise
+        elif noise_type == "uniform":
+            noise_x = np.random.uniform(-noise_level, noise_level, size=new_x_coords.shape)  # Uniform noise
+            noise_y = np.random.uniform(-noise_level, noise_level, size=new_y_coords.shape)  # Uniform noise
+        else:
+            raise ValueError("Unsupported noise type: ", noise_type)
 
-	if point_dist == "unif":
-		x_coords = np.linspace(0, L_etoe, N_node)
-	elif point_dist == "rand":
-		x_coords = np.random.uniform(0, L_etoe, N_node)
-		x_coords = np.sort(x_coords)
-	else:
-		raise ValueError("Unsupported distribution type: ", point_dist)
+        # Apply noise to the x and y coordinates
+        new_x_coords += noise_x
+        new_y_coords += noise_y
 
-	x_centered = x_coords - L_etoe / 2.0
-	y_coords = height * (1 - (x_centered / (L_etoe / 2))**2)
+    coords = np.column_stack((new_x_coords, new_y_coords))
+    return coords
 
 
-	# Add noise to the coordinates
-	if noise_level > 0:
-		np.random.seed(1234)
-		if noise_type == "normal":
-			noise_x = np.random.normal(0, noise_level, size=x_coords.shape)  # Gaussian noise
-			noise_y = np.random.normal(0, noise_level, size=y_coords.shape)  # Gaussian noise
-		elif noise_type == "uniform":
-			noise_x = np.random.uniform(-noise_level, noise_level, size=x_coords.shape)  # Uniform noise
-			noise_y = np.random.uniform(-noise_level, noise_level, size=y_coords.shape)  # Uniform noise
-		else:
-			raise ValueError("Unsupported noise type: ", noise_type)
+# def make_parabola(
+#     N_node : int,	# number of nodes
+#     L_etoe : float, # end-to-end distance
+#     height: float, 
+#     point_dist: str = "unif",
+#     noise_level: float = 0.0, 
+#     noise_type: str = "normal" # "normal" for Gaussian, "uniform" for uniform
+# ) -> np.ndarray:
 
-		# Apply noise to the x and y coordinates
-		x_coords += noise_x
-		y_coords += noise_y
+# 	if point_dist == "unif":
+# 		x_coords = np.linspace(0, L_etoe, N_node)
+# 	elif point_dist == "rand":
+# 		x_coords = np.random.uniform(0, L_etoe, N_node)
+# 		x_coords = np.sort(x_coords)
+# 	else:
+# 		raise ValueError("Unsupported distribution type: ", point_dist)
+
+# 	x_centered = x_coords - L_etoe / 2.0
+# 	y_coords = height * (1 - (x_centered / (L_etoe / 2))**2)
 
 
-	coords = np.column_stack((x_coords, y_coords))
-	return coords
+# 	# Add noise to the coordinates
+# 	if noise_level > 0:
+# 		np.random.seed(1234)
+# 		if noise_type == "normal":
+# 			noise_x = np.random.normal(0, noise_level, size=x_coords.shape)  # Gaussian noise
+# 			noise_y = np.random.normal(0, noise_level, size=y_coords.shape)  # Gaussian noise
+# 		elif noise_type == "uniform":
+# 			noise_x = np.random.uniform(-noise_level, noise_level, size=x_coords.shape)  # Uniform noise
+# 			noise_y = np.random.uniform(-noise_level, noise_level, size=y_coords.shape)  # Uniform noise
+# 		else:
+# 			raise ValueError("Unsupported noise type: ", noise_type)
+
+# 		# Apply noise to the x and y coordinates
+# 		x_coords += noise_x
+# 		y_coords += noise_y
+
+
+# 	coords = np.column_stack((x_coords, y_coords))
+# 	return coords
 
 def add_noise(ori_coords: np.ndarray, noise_level: float, seed: int=0) -> np.ndarray:
 
@@ -157,7 +207,7 @@ def plot_parabola(coords: np.ndarray, force: np.ndarray = None, scale = 10):
 def plot_parabola_ax(
 		coords: np.ndarray, 
 		force: np.ndarray, 
-		ax,  
+		ax,
 		force_type, scale,
 		ori_coords: np.ndarray = None, 
 		s_val: float = None, 

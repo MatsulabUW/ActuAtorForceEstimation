@@ -12,11 +12,13 @@ def shift_coords(coords: npt.NDArray[np.float64]
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     # shift coordinate so that the data matches the image
 
+    coords_copy = coords.copy()
+
     x_shift = 765*0.6
     y_shift = 940*0.6
 
-    x = coords[:, 0]
-    y = coords[:, 1]
+    x = coords_copy[:, 0]
+    y = coords_copy[:, 1]
 
     x -= x_shift
     y += y_shift
@@ -32,7 +34,8 @@ def load_image(file_stem: str):
     return image
 
 def resize_image(image, scale_factor):
-    return ndimage.zoom(image, scale_factor)
+    image_copy = image
+    return ndimage.zoom(image_copy, scale_factor)
 
 def plot_dots(
     file_stem: str,
@@ -291,6 +294,68 @@ def plot_coord_curve_force(
     plt.close(fig)
 
 
+def plot_img_ax(
+    file_stem: str,
+    coords: npt.NDArray[np.float64],
+    curves: npt.NDArray[np.float64],
+    forces: npt.NDArray[np.float64],
+    ax,
+    force_type,
+    scale,
+    ori_coords: npt.NDArray[np.float64] = None,
+    xlim=None,
+    ylim=(300, 0),
+    n_iter: int = None, 
+    cmap: str = 'viridis',
+):
+    coords_x, coords_y = shift_coords(coords)
+    
+    image = load_image(file_stem)
+    resized_image = resize_image(image, 0.6/1.1)
+    
+    ax.imshow(resized_image, cmap='gray', alpha=0.6)
+
+    if xlim:
+        ax.set_xlim(xlim)
+    if ylim:
+        ax.set_ylim(ylim)
+
+    # Prepare edges (line segments) using coordinates
+    segments = [
+        [(coords_x[i], coords_y[i]), (coords_x[i+1], coords_y[i+1])]
+        for i in range(len(coords_x) - 1)
+    ]
+
+    # Create a LineCollection from the segments and color by curves
+    lc = LineCollection(segments, cmap=cmap, norm=plt.Normalize(vmin=np.min(curves), vmax=np.max(curves)))
+    lc.set_array(curves)  # Use the curves array for coloring the edges
+    # lc.set_linewidth(5)   # Set line width (adjust as necessary)
+    
+    # Add the LineCollection to the plot
+    ax.add_collection(lc)
+    
+
+    if ori_coords is not None:
+        x_ori_coords, y_ori_coords = shift_coords(ori_coords)
+        ax.scatter(x_ori_coords, y_ori_coords, edgecolor='black', facecolors='none', label='Original', s=10, lw=1)
+
+    scale_factor = 1e5
+    fx = forces[:, 0] * scale_factor
+    fy = forces[:, 1] * scale_factor
+    force_magnitudes = np.sqrt(fx**2 + fy**2) / scale_factor
+    ax.quiver(coords_x, coords_y, fx, fy, color='red', angles='xy', scale_units='xy', scale=scale, label='Force')
+
+
+    if n_iter is not None:
+        ax.set_title(f"{force_type} (step: t = {int(n_iter)})")
+
+    # ax.set_xlabel('X (nm)')
+    # ax.set_ylabel('Y (nm)')
+    # ax.legend()
+    ax.axis('off')
+
+
+
 
 def display_forces_side_by_side(
     file_stem: str,
@@ -303,7 +368,6 @@ def display_forces_side_by_side(
     save=False, output_dir="figures", boundary=None, edge=None
 ):
     fig, axes = plt.subplots(1, 2, figsize=(15, 7))
-
     coord_x, coord_y = shift_coords(coords)
 
     for i, force_label in enumerate(["Bending Force", "Tensile Force"]):
