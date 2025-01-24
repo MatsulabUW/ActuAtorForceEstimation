@@ -14,6 +14,89 @@ import numpy as np
 import numpy.typing as npt
 
 
+
+# def point_to_segment_distance(Q, P1, P2):
+#     """Calculate the distance from point Q to the line segment P1-P2 with robust handling."""
+#     segment_vector = P2 - P1
+#     segment_length = jnp.linalg.norm(segment_vector)
+
+#     # Handle the zero-length segment case
+#     def zero_length_case():
+#         return jnp.linalg.norm(Q - P1)  # Treat the segment as a single point at P1
+
+#     # Normal case
+#     def normal_case():
+#         t = jnp.dot(Q - P1, segment_vector) / (segment_length ** 2 + 1e-8)  # Avoid division by zero
+#         # t = jnp.dot(Q - P1, segment_vector) / (segment_length**2)
+#         t = jnp.clip(t, 0.0, 1.0)  # Clamp t to the segment
+#         projection = P1 + t * segment_vector
+#         return jnp.linalg.norm(Q - projection)
+
+#     # Use conditional logic to handle zero-length segments
+#     return jax.lax.cond(segment_length < 1e-8, zero_length_case, normal_case)
+#     # return normal_case()
+
+
+def point_to_segment_distance(Q, P1, P2):
+    """Calculate the distance from point Q to the line segment P1-P2 with robust handling."""
+    segment_vector = P2 - P1
+    segment_length = jnp.linalg.norm(segment_vector)
+
+    # Handle the zero-length segment case
+    def zero_length_case():
+        return jnp.linalg.norm(Q - P1)
+
+    # Normal case
+    def normal_case():
+        t = jnp.dot(Q - P1, segment_vector) / (segment_length ** 2 + 1e-8)  # Stabilize denominator
+        t = jnp.clip(t, 0.0, 1.0)  # Clamp t to the segment
+        projection = P1 + t * segment_vector
+        return jnp.linalg.norm(Q - projection)
+
+    # Detect if Q == P1 or Q == P2
+    is_at_p1 = jnp.allclose(Q, P1)
+    is_at_p2 = jnp.allclose(Q, P2)
+
+    def exact_case():
+        return 0.0  # Distance is zero
+
+    # Combine the exact case detection with conditional logic
+    return jax.lax.cond(
+        is_at_p1 | is_at_p2,  # If Q equals P1 or P2
+        exact_case,
+        lambda: jax.lax.cond(segment_length < 1e-8, zero_length_case, normal_case),
+    )
+
+def distances_to_curve(data_points, vertex_positions):
+    """
+    Calculate the minimum distance from each data point to a curve.
+
+    Args:
+        data_points: np.NDArray[np.float64] or jnp.array, shape (M, D)
+            Array of M points in D-dimensional space.
+        vertex_positions: np.NDArray[np.float64] or jnp.array, shape (N, D)
+            Array of N vertices defining the curve in D-dimensional space.
+
+    Returns:
+        distances: jnp.array, shape (M,)
+            Array of minimum distances from each data point to the curve.
+    """
+    # # Ensure inputs are JAX arrays
+    # data_points = jnp.asarray(data_points)
+    # vertex_positions = jnp.asarray(vertex_positions)
+
+    P1 = vertex_positions[:-1]
+    P2 = vertex_positions[1:]
+
+    # Vectorize the distance calculation for all segments
+    @jax.vmap
+    def point_to_curve(Q):
+        segment_distances = jax.vmap(point_to_segment_distance, in_axes=(None, 0, 0))(Q, P1, P2)
+        return jnp.min(segment_distances)  # Find the minimum distance to any segment
+
+    return point_to_curve(data_points)
+
+
 class Material(ABC):
     @abstractmethod
     def energy(
@@ -106,21 +189,21 @@ class Material(ABC):
 class ClosedPlaneCurveMaterial(Material):
     def __init__(
         self,
-        Kb: float = 0.1,
-        Ksg: float = 50,
-        Ksl: float = 1,
+        kappa: float = 0.1,
+        sigma: float = 50,
+        Kr: float = 1,
         boundary: str = None
     ):
         """Initialize plane curve material
 
         Args:
-            Kb (float, optional): Bending modulus in units of pN um.Defaults to 1.
-            Ksg (float, optional): Global stretching modulus in units of PN um/um^2. Defaults to 0.
-            Ksl (float, optional): Regularization modulus. Defaults to 1.
+            kappa (float, optional): Bending modulus in units of pN um.Defaults to 1.
+            sigma (float, optional): Global stretching modulus in units of PN um/um^2. Defaults to 0.
+            Kr (float, optional): Regularization modulus. Defaults to 1.
         """
-        self.Kb = Kb
-        self.Ksg = Ksg
-        self.Ksl = Ksl
+        self.kappa = kappa
+        self.sigma = sigma
+        self.Kr = Kr
         self.boundary = boundary
 
     def _check_valid(
@@ -176,9 +259,9 @@ class ClosedPlaneCurveMaterial(Material):
             tan_vertex_turning_angles + jnp.roll(tan_vertex_turning_angles, 1)
         ) / edgeLengths
 
-        bendingEnergy = self.Kb * jnp.sum(edgeCurvatures * edgeCurvatures * edgeLengths)
-        surfaceEnergy = self.Ksg * jnp.sum(edgeLengths)
-        regularizationEnergy = self.Ksl * jnp.sum(
+        bendingEnergy = self.kappa * 0.25 * jnp.sum(edgeCurvatures * edgeCurvatures * edgeLengths)
+        surfaceEnergy = self.sigma * jnp.sum(edgeLengths)
+        regularizationEnergy = self.Kr * jnp.sum(
             ((edgeLengths - referenceEdgeLength) / referenceEdgeLength) ** 2
         )
         return jnp.array([bendingEnergy, surfaceEnergy, regularizationEnergy])
@@ -248,27 +331,37 @@ class ClosedPlaneCurveMaterial(Material):
         return self._energy_force(vertex_positions)
 
 
+
 class OpenPlaneCurveMaterial(Material):
     def __init__(
         self,
-        Kb: float = 0.1,
-        Ksg: float = 50,
-        Ksl: float = 1,
+        kappa: float = 0.1,
+        sigma: float = 50,
+        Kr: float = 1,
+        k_d: float = 1,
+        n_degree: int = 2,
         boundary: str = None, 
-        spont_curvatures: npt.NDArray[np.float64] = None
+        spont_curvatures: npt.NDArray[np.float64] = None, 
+        data_points: npt.NDArray[np.float64] = None,
     ):
         """Initialize plane curve material
 
         Args:
-            Kb (float, optional): Bending modulus in units of pN um.Defaults to 1.
-            Ksg (float, optional): Global stretching modulus in units of PN um/um^2. Defaults to 0.
-            Ksl (float, optional): Regularization modulus. Defaults to 1.
+            kappa (float, optional): Bending modulus in units of pN nm. Defaults to 1.
+            sigma (float, optional): Global stretching modulus in units of PN nm/nm^2. Defaults to 0.
+            Kr (float, optional): Regularization modulus. Defaults to 1.
+            Kd (float, optional): Data fidelity modulus. Defaults to 1.
         """
-        self.Kb = Kb
-        self.Ksg = Ksg
-        self.Ksl = Ksl
+        self.kappa = kappa
+        self.sigma = sigma
+        self.Kr = Kr
+        # self.Kd = Kd
+        self.k_d = k_d
+        self.n_degree = n_degree
         self.boundary = boundary
         self.spont_curvatures = spont_curvatures
+        # self.data_points = jnp.asarray(data_points) # Convert data points to JAX array
+        self.data_points = data_points
 
 
     def _check_valid(
@@ -307,6 +400,8 @@ class OpenPlaneCurveMaterial(Material):
         Returns:
             float: Energy of the system
         """
+        vertex_positions = jnp.asarray(vertex_positions)
+
         x = vertex_positions[:, 0]
         y = vertex_positions[:, 1]
         dx = jnp.diff(x)
@@ -328,25 +423,29 @@ class OpenPlaneCurveMaterial(Material):
             jnp.tan(vertexTurningAngles[:-1] / 2) + jnp.tan(vertexTurningAngles[1:] / 2)
         ) / edgeLengths
 
-        # # TEST spontaneous curvature implementation
-        # # edgeCurvatures = edgeCurvatures - 1.0/10 # testing for non-zero \bar{H}
-        # curve_str = 40
-        # curve_end = 60
-        # spont_cvt = 0.3
-        # edgeCurvatures = edgeCurvatures.at[curve_str:curve_end].set(edgeCurvatures[curve_str:curve_end] - spont_cvt)
-        # ####
-
         edgeCurvatures = edgeCurvatures - self.spont_curvatures
 
-        bendingEnergy = self.Kb * jnp.sum(edgeCurvatures * edgeCurvatures * edgeLengths)
-        surfaceEnergy = self.Ksg * jnp.sum(edgeLengths)
+        dataDistances = distances_to_curve(self.data_points, vertex_positions)
+        # dataDistances = 0.0
 
-        regularizationEnergy = self.Ksl * jnp.sum(
+
+        bendingEnergy = self.kappa * 0.25 * jnp.sum(edgeCurvatures * edgeCurvatures * edgeLengths)
+        surfaceEnergy = self.sigma * jnp.sum(edgeLengths)
+
+        # regularizationEnergy = self.Kr * jnp.sum(
+        regularizationEnergy = self.Kr * jnp.mean(
             ((edgeLengths - referenceEdgeLength) / referenceEdgeLength) ** 2
         )
 
-        return jnp.array([bendingEnergy, surfaceEnergy, regularizationEnergy])
-        # return jnp.array([surfaceEnergy, regularizationEnergy])
+        # dataDistances = jnp.where(dataDistances < self.dist_c, 0, dataDistances - self.dist_c)
+        # dataEnergy = self.Kd * jnp.sum(dataDistances * dataDistances)
+        dataEnergy = self.k_d * jnp.mean(jnp.power(dataDistances, self.n_degree))
+        # dataEnergy = jnp.mean(dataDistances * dataDistances * dataDistances * dataDistances)
+
+        return jnp.array([bendingEnergy, surfaceEnergy, regularizationEnergy, dataEnergy])
+
+
+
 
     def energy(
         self, 
@@ -422,6 +521,7 @@ class OpenPlaneCurveMaterial(Material):
         """
         energy, vjp = jax.vjp(self.energy, vertex_positions)
         (force,) = jax.vmap(vjp, in_axes=0)(-1 * jnp.eye(len(energy)))
+        # jax.debug.print("Force: {}", force)
         force = self._apply_boundary_conditions(force, self.boundary)
         return energy, force
 
@@ -438,6 +538,7 @@ class OpenPlaneCurveMaterial(Material):
         """
         self._check_valid(vertex_positions)
         return self._energy_force(vertex_positions)
+
 
 
 

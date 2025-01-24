@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
+from automembrane.energy import point_to_segment_distance, distances_to_curve
 
 
 class ClosedPlaneCurveGeometry:
@@ -197,5 +198,27 @@ class OpenPlaneCurveGeometry:
         vertex_normal /= np.linalg.norm(vertex_normal, axis=1).reshape(-1, 1)
 
         return vertex_normal
+
+
+    @staticmethod
+    @jax.jit
+    def data_dist(
+        vertex_positions: npt.NDArray[np.float64],
+        data_points: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        """Compute data distance
+        Args:
+            vertex_positions (npt.NDArray[np.float64]): Coordinates
+            data_points (npt.NDArray[np.float64]): Coordinates of data
+
+        Returns:
+            npt.NDArray[np.float64]: data distance
+        """
+        
+        dataDistances = distances_to_curve(data_points, vertex_positions)
+        return dataDistances
+
+
+
 
 
