@@ -29,7 +29,6 @@ def get_dimensional_tension(Ksg_, Kb, coords):
 def get_average_edge_length(coords):
     return float(np.mean(OpenPlaneCurveGeometry.edge_length(coords)))
 
-
 # def get_force_density(parameters, coords):
 #     # mem = ClosedPlaneCurveMaterial(**parameters)
 #     mem = OpenPlaneCurveMaterial(**parameters)
@@ -44,6 +43,9 @@ def get_average_edge_length(coords):
 #     return forces
 
 def get_force_density(parameters, coords, data_points = None, spont_c = None):
+
+    if data_points == None:
+        data_points = coords
 
     # mem = ClosedPlaneCurveMaterial(**parameters)
     # mem = OpenPlaneCurveMaterial(**parameters)

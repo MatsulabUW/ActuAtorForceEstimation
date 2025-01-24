@@ -19,6 +19,7 @@ from automembrane.integrator import fwd_euler_integrator
 from PIL import Image
 from scipy.interpolate import splev, splprep
 from tqdm.contrib.concurrent import process_map
+from automembrane.geometry import OpenPlaneCurveGeometry
 
 
 from actuator_constants import image_microns_per_pixel, raw_image_paths, files
@@ -283,11 +284,26 @@ def preprocess_mesh(
     return coords, original_coords
 
 
-def relax_bending(coords, data_points, Kb, Ks, Kr, Kd, dt, n_iter, boundary):
+def convert_unit(Kb, Ks, coords):
+    total_length  = np.sum(OpenPlaneCurveGeometry.edge_length(coords))
+    max_curvature = np.max(np.abs(OpenPlaneCurveGeometry.edge_curvature(coords)))
+    ave_curvature = np.mean(np.abs(OpenPlaneCurveGeometry.edge_curvature(coords)))
+    curvature_0 = max_curvature
+    kappa = Kb / curvature_0 / curvature_0 / total_length * 4.0
+    sigma = Ks / total_length
+    print("max_H: ", max_curvature)
+    print("ave_H: ", ave_curvature)
+    print("cleng: ", total_length)
+    print("kappa: ", kappa)
+    print("sigma: ", sigma)
+    return kappa, sigma
+
+
+def relax_bending(coords, data_points, kappa, sigma, Kr, Kd, dt, n_iter, boundary):
     # Instantiate material properties
     parameters = {
-        "Kb": Kb / 4,
-        "Ks": Ks,
+        "kappa": kappa,
+        "sigma": sigma,
         "Kr": Kr,
         "Kd": Kd,
         "boundary": boundary
@@ -304,18 +320,20 @@ def relax_bending(coords, data_points, Kb, Ks, Kr, Kd, dt, n_iter, boundary):
     return coords
 
 
-def relax_bending_log(coords, data_points, kappa, sigma, Kr, Kd, dt, n_iter, boundary, del_save, spont_c=None):
-    # Instantiate material properties
+def relax_bending_log(coords, data_points, Kb, Ks, Kr, k_d, n_degree, dt, n_iter, boundary, del_save, spont_c=None):
+    kappa, sigma = convert_unit(Kb, Ks, coords)
     parameters = {
         "kappa": kappa,
         "sigma": sigma,
         "Kr": Kr,
-        "Kd": Kd,
+        # "Kd": Kd,
+        "k_d": k_d,
+        "n_degree": n_degree,
         "boundary": boundary
     }
     # Perform energy relaxation
     if n_iter > 0:
-        coords_log, energy_log, forces_log = fwd_euler_integrator(
+        coords_log, energy_log, forces_log, length_log, curvat_log, dtdist_log = fwd_euler_integrator(
             coords,
             OpenPlaneCurveMaterial(**parameters, data_points = data_points, spont_curvatures = spont_c),
             n_steps=n_iter,
@@ -323,7 +341,7 @@ def relax_bending_log(coords, data_points, kappa, sigma, Kr, Kd, dt, n_iter, bou
             del_save=del_save,
         )
 
-    return coords_log, energy_log, forces_log
+    return coords_log, energy_log, forces_log, length_log, curvat_log, dtdist_log
 
 
 

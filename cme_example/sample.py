@@ -233,7 +233,8 @@ def plot_parabola_ax(
 
     ax.legend()
     ax.set_xlim(-60, 160)
-    ax.set_ylim(-30, 70)
+    # ax.set_ylim(-30, 70)
+    ax.set_ylim(-30, 300)
     
     # Set title with force type and mesh size
     if mesh_size is not None:
@@ -245,7 +246,6 @@ def plot_parabola_ax(
     if n_iter is not None:
         ax.set_title(f"{force_type} (step: t = {int(n_iter)})")
         # ax.set_title(f"{force_type} (number: n = {int(n_iter)})")
-
 
 
 

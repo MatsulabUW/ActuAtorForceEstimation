@@ -73,14 +73,17 @@ def plot_coord_force(
     file_stem: str,
     coord: npt.NDArray[np.float64],
     force: npt.NDArray[np.float64],
-    xlim=None,
-    ylim=(300, -50),
+    xlim=(50, 300),
+    ylim=(300, 0),
     iteration: int = 0,
     save_image: bool = False,
     scale_factor: float = 0.003,
     output_filename: str = None,
+    title: str = None,
 ):
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(5.2, 4.4))
+    fig.tight_layout(pad=2.5)
+    fig.subplots_adjust(left=0, right=0.76)
     coord_x, coord_y = shift_coords(coord)
     
     image = load_image(file_stem)
@@ -93,7 +96,8 @@ def plot_coord_force(
     if ylim:
         ax.set_ylim(ylim)
 
-    ax.scatter(coord_x, coord_y, color='red', s=2, alpha=0.8)
+    # ax.scatter(coord_x, coord_y, color='red', s=2, alpha=0.8)
+    ax.plot(coord_x, coord_y, linestyle="--", color="red", linewidth=2, alpha=0.6)
 
 
     f_mag = np.linalg.norm(force, axis=1)
@@ -111,24 +115,31 @@ def plot_coord_force(
         # scale=0.003,
         # scale=0.03,
         scale_units="xy",
-        width=0.005,
+        width=0.009,
     )
-    # cbar = fig.colorbar(
-    #     q,
-    #     ax=ax,
-    # )
-    # cbar.ax.get_yaxis().labelpad = 20
-    # cbar.ax.set_ylabel(r"Force Density $\mathrm{(pN/nm^2)}$", rotation=270)
+    cbar = fig.colorbar(
+        q,
+        ax=ax,
+        fraction=0.05,  # Adjust this to control the relative size of the colorbar
+        shrink=0.9,      # Reduces the height of the colorbar
+    )
+    cbar.ax.get_yaxis().labelpad = 30
+    cbar.ax.set_ylabel(r"Force Density $\mathrm{(pN/nm^2)}$", rotation=270, fontsize=18)
+    cbar.ax.tick_params(axis='both', labelsize=18)
 
     
-    ax.set_xlabel('X (nm)')
-    ax.set_ylabel('Y (nm)')
+    ax.set_xlabel('X (nm)', fontsize=18)
+    ax.set_ylabel('Y (nm)', fontsize=18)
+    ax.tick_params(axis='both', labelsize=18)
     # ax.legend()
-
+    if title is not None:
+        ax.set_title(title, fontsize=18)
 
     if save_image:
         output_path = os.path.join("figures/bcs_test", f"blabla.png")
         plt.savefig(output_path)
+        # plt.savefig(output_path, bbox_inches='tight', dpi=300)
+
         # print(f"Image saved at {output_path}")
 
     if output_filename: 
@@ -138,6 +149,70 @@ def plot_coord_force(
 
     plt.show()
     plt.close(fig)
+
+
+
+def plot_coord_force_ax(
+    file_stem: str,
+    ax,
+    coord: npt.NDArray[np.float64],
+    force: npt.NDArray[np.float64],
+    xlim=(50, 300),
+    ylim=(300, 0),
+    scale_factor: float = 0.003,
+    title: str = None,
+):
+    coord_x, coord_y = shift_coords(coord)
+    
+    image = load_image(file_stem)
+    resized_image = resize_image(image, 0.6/1.1)
+    
+    ax.imshow(resized_image, cmap='gray', alpha=0.6)
+
+    if xlim:
+        ax.set_xlim(xlim)
+    if ylim:
+        ax.set_ylim(ylim)
+
+    # ax.scatter(coord_x, coord_y, color='red', s=2, alpha=0.8)
+    ax.plot(coord_x, coord_y, linestyle="--", color="red", linewidth=2, alpha=0.6)
+
+
+    f_mag = np.linalg.norm(force, axis=1)
+
+    q = ax.quiver(
+        coord_x,
+        coord_y,
+        force[:, 0],
+        force[:, 1],
+        f_mag,
+        cmap=mpl.cm.viridis_r,
+        angles="xy",
+        # label="force",
+        scale=scale_factor,
+        # scale=0.003,
+        # scale=0.03,
+        scale_units="xy",
+        width=0.01,
+    )
+    cbar = ax.figure.colorbar(
+        q,
+        ax=ax,
+        fraction=0.05,  # Adjust this to control the relative size of the colorbar
+        shrink=0.9,      # Reduces the height of the colorbar
+    )
+    cbar.ax.get_yaxis().labelpad = 20
+    cbar.ax.set_ylabel(r"Force Density $\mathrm{(pN/nm^2)}$", rotation=270)
+
+    
+    ax.set_xlabel('X (nm)')
+    ax.set_ylabel('Y (nm)')
+
+
+    if title is not None:
+        ax.set_title(title)
+
+
 
 
 
@@ -200,6 +275,68 @@ def plot_coord_curve(
 
     plt.show()
     plt.close(fig)
+
+
+def plot_coord_curve_ax(
+    file_stem: str,
+    ax,
+    coords: npt.NDArray[np.float64],
+    curves: npt.NDArray[np.float64],
+    xlim=(50, 300),
+    ylim=(300, 0),
+    scale_factor: float = 0.003,
+    cmap: str = 'viridis_r',
+    title: str = None,
+):
+    coords_x, coords_y = shift_coords(coords)
+    
+    image = load_image(file_stem)
+    resized_image = resize_image(image, 0.6/1.1)
+    
+    ax.imshow(resized_image, cmap='gray', alpha=0.6)
+
+    if xlim:
+        ax.set_xlim(xlim)
+    if ylim:
+        ax.set_ylim(ylim)
+
+
+    # Prepare edges (line segments) using coordinates
+    # Assuming consecutive pairs of nodes are connected by edges
+    segments = [
+        [(coords_x[i], coords_y[i]), (coords_x[i+1], coords_y[i+1])]
+        for i in range(len(coords_x) - 1)
+    ]
+
+    # Create a LineCollection from the segments and color by curves
+    lc = LineCollection(segments, cmap=cmap, norm=plt.Normalize(vmin=np.min(curves), vmax=np.max(curves)))
+    lc.set_array(curves)  # Use the curves array for coloring the edges
+    lc.set_linewidth(3)   # Set line width (adjust as necessary)
+    
+    # Add the LineCollection to the plot
+    ax.add_collection(lc)
+    
+    # Add a color bar to indicate the mapping of values in `curves`
+    # ax.figure.colorbar(lc, ax=ax, label='Curve Values')
+
+    cbar = ax.figure.colorbar(
+        lc,
+        ax=ax,
+        fraction=0.05,  # Adjust this to control the relative size of the colorbar
+        shrink=0.9,      # Reduces the height of the colorbar
+    )
+    cbar.ax.get_yaxis().labelpad = 20
+    cbar.ax.set_ylabel(r"Curvature $\mathrm{(/nm)}$", rotation=270)
+
+    # Scatter nodes for clarity (optional)
+    # ax.scatter(coords_x, coords_y, color='red', s=2, alpha=0.8)
+
+
+    ax.set_xlabel('X (nm)')
+    ax.set_ylabel('Y (nm)')
+
+    if title is not None:
+        ax.set_title(title)
 
 
 
