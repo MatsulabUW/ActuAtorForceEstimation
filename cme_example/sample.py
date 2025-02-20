@@ -232,9 +232,10 @@ def plot_parabola_ax(
         ax.scatter(x_ori_coords, y_ori_coords, edgecolor='black', facecolors='none', label='Original', s=50, lw=2)
 
     ax.legend()
-    ax.set_xlim(-60, 160)
-    # ax.set_ylim(-30, 70)
-    ax.set_ylim(-30, 300)
+    # ax.set_xlim(-60, 160)
+    ax.set_xlim(-20, 120)
+    ax.set_ylim(-30, 100)
+    # ax.set_ylim(0, 100)
     
     # Set title with force type and mesh size
     if mesh_size is not None:
